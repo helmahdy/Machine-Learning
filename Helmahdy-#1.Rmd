@@ -1,0 +1,72 @@
+---
+title: "Assignment1-ML"
+output:
+  html_document: default
+  pdf_document: default
+---
+```{r}
+#Data source : https://data.fivethirtyeight.com (Data from 2010-2012, Age <28)
+#Headers descriptions (Men:Male graduates /Women:Female graduates/ShareWomen:Women as share of total/ Total:Total number of people with major/Median:Median earnings of full-time, year-round workers)
+
+```
+
+```{r}
+#1-Import the dataset into R
+library("readr")
+women_stem <- read.csv ("women-stem.csv")
+```
+
+
+```{r}
+#2-Identify some quantitative and categorical variables and print out descriptive statistics for them
+str(women_stem)
+str(women_stem$Major_category)
+categories <- as.factor(women_stem$Major_category)
+##quantitative Variables: Rank, total, men, women, median, sharewomen
+##categorical variables:Major, major-caregory
+##dataset contains 76 rows and  9 columns
+##the least number of female graduates in a stem major is 77, max is 187621, mean is 12715
+min(women_stem$Women)
+max(women_stem$Women)
+mean(women_stem$Women)
+mean(women_stem$Men)
+
+##in computers & Mathematics major, the average number of female graduate was 8,208 compared to 18,975 average number of male graduates
+by(women_stem, women_stem$Major_category, summary)
+
+```
+
+```{r}
+#3-Transform at least one variable. It doesn't matter what the transformation is.
+library(tidyverse)
+Womenshare_percent <- women_stem %>%
+select(Major_category, Men, Women, Median, ShareWomen) %>%
+mutate(ShareWomen = ShareWomen*100) %>%
+arrange(desc(ShareWomen))
+
+Engineering_major <- women_stem %>%
+filter(Major_category == "Engineering") %>%
+select(Major, Men, Women, Median)
+
+```
+
+```{r}
+#4-Plot at least one quantitative variable, and one scatterplot
+
+ggplot(women_stem, aes (x= Major_category, y= Median)) + geom_boxplot()
+
+ggplot(women_stem, aes (x= Major_category, y= Total)) + geom_col()
+
+ggplot(Womenshare_percent, aes (x= Major_category, y= Women)) + geom_col()
+
+ggplot(Womenshare_percent, aes (x= Major_category, y= Men)) + geom_col()
+```
+
+
+
+
+
+
+
+
+
