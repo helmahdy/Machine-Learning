@@ -1,0 +1,228 @@
+---
+title: 'Assignment #2'
+output: html_document
+---
+
+
+```{r}
+library(readr)
+library(lattice)
+library("caret")
+library("ISLR")
+```
+
+```{r}
+Universalbank <-  read_csv ("Universalbank.csv")
+View(Universalbank)
+```
+
+#Visuals to understand relations between variables
+```{r}
+Universalbank_num <-Universalbank [, c(2:4,6:14)] 
+library(corrplot)
+corrplot(cor(Universalbank_num), method="color")
+summary(Universalbank_num)
+
+```
+#Convert Education to dummy variables 
+```{r}
+library(fastDummies)
+Universalbank_dummy <- dummy_cols(Universalbank_num, select_columns = "Education")
+
+```
+
+#Splitting data 60% training 40% Vlidation
+```{r}
+set.seed(123)
+Train_index <- createDataPartition(Universalbank_dummy$`Personal Loan`, p=0.6, list=FALSE)#split 60% of data into training and rest to validation
+Training_data <-Universalbank_dummy[Train_index,]
+Validation_data <-Universalbank_dummy [-Train_index,]
+
+summary(Training_data)
+summary(Validation_data)
+library("plyr")
+count(Training_data$`Personal Loan`)  #checking the frequency of personal loan is splitted properly
+
+count(Validation_data$`Personal Loan`)
+
+```
+
+```{r} 
+#Data Normalization
+train.normalized.df <- Training_data
+valid.normalized.df <- Validation_data
+norm.values <- preProcess(Training_data[, 1:7], method=c("center", "scale"))
+
+train.normalized.df [, 1:7]  <- predict(norm.values,Training_data[,1:7])  # Replace columns with normalized values
+valid.normalized.df [, 1:7]  <- predict(norm.values, Validation_data[,1:7])
+
+```
+
+#Modeling k-NN
+```{r}
+library(FNN)
+cl= as.data.frame(train.normalized.df[,8])
+tnf = as.data.frame(train.normalized.df)
+vnf = as.data.frame(valid.normalized.df)
+dim(cl)
+dim(train.normalized.df[,1:7])
+dim(valid.normalized.df[,1:7])
+knn_predict <- knn(tnf, vnf, cl=train.normalized.df$`Personal Loan`, k =1)
+head(knn_predict)
+knn_predict <- as.data.frame(knn_predict)
+
+```
+
+
+```{r}
+customer_df <- data.frame ("Age" =40, "Experience"=10, "Income"=84, "Family"=2, "CCAvg"=2, "Education_1"=0, "Education_2"=1, "Education_3"=0, "Mortgage"=0,  "Securities Account"=0, "CD Account"=0,  "Online" =1, "Credit Card"=1)
+
+dim(tnf)
+dim(customer_df)
+
+customerClass <- knn ((tnf[, c(-6, -8)]), (customer_df),  cl = train.normalized.df$`Personal Loan`, k = 1, prob = 0.5)
+
+summary(customerClass)  #CUSTOMER class is 1. Customer is likely to accept a personal loan according to this model.
+
+```
+
+
+```{r}
+library(lattice)
+library(ggplot2)
+library(caret)
+
+ # k=1 gives the highest accuracy percentage of 98 % however it should be noted that this classification model is built based on actual converted customers percentage of only 9.8% of the whole dataset which might be causing overfitting in the model
+accuracy.df <- data.frame(k= seq (1, 30, 1), accuracy = rep(0, 30))
+for( i in 1:30) {
+    prediction <- knn ( tnf,  vnf,  cl = train.normalized.df$`Personal Loan`, k = i)
+    accuracy.df[i, 2] <- confusionMatrix ( as.factor (prediction), as.factor( valid.normalized.df$`Personal Loan`))$overall[1]
+}
+
+accuracy.df
+```
+
+Confusion Matrix
+```{r}
+library(gmodels)
+valid_labels <-as.data.frame( vnf[,8])
+
+CrossTable( valid_labels$`vnf[, 8]`,  knn_predict$knn_predict,   prop.chisq = FALSE)   #Model accuracy = TP+TN/Total= 99%, specifity= 99.7%, percision= 98%
+
+
+```
+
+#Splitting data 60% training,  30% Vlidation, 20% test
+```{r}
+set.seed(12)
+Train_index2 <- createDataPartition(Universalbank_dummy$`Personal Loan`, p=0.50, list=FALSE)
+Training_data2 <- Universalbank_dummy[Train_index2,]
+
+CombinedValidation_test <- Universalbank_dummy [-Train_index2,]
+
+Valid_index2 <- createDataPartition (CombinedValidation_test$`Personal Loan`,  p=0.60, list=FALSE)
+Validation_data2 <- CombinedValidation_test[Valid_index2,]
+Test_data2 <- CombinedValidation_test[-Valid_index2,]
+
+```
+
+
+```{r}
+#Data Normalization
+train.normalized.df2 <- Training_data2
+valid.normalized.df2 <- Validation_data2
+Test.normalized.df2 <- Test_data2
+Combined_normalized2<-CombinedValidation_test
+
+norm.values2 <- preProcess(Training_data2[, 1:7], method=c("center", "scale"))
+
+train.normalized.df2 [, 1:7]  <- predict(norm.values2, Training_data2[,1:7])  # Replace columns with normalized values
+valid.normalized.df2 [, 1:7]  <- predict(norm.values2,  Validation_data2[,1:7])
+
+Test.normalized.df2 [, 1:7] <- predict(norm.values2, Test_data2[, 1:7])
+
+Combined_normalized2[, 1:7] <- predict(norm.values2, CombinedValidation_test[,1:7])
+  
+```
+
+
+#Modeling k-NN with validation data
+```{r}
+library(FNN)
+cl2= as.data.frame(train.normalized.df2[,8])
+tnf2 = as.data.frame(train.normalized.df2)
+vnf2= as.data.frame(valid.normalized.df2)
+dim(cl2)
+dim(train.normalized.df2[,1:7])
+dim(valid.normalized.df2[,1:7])
+knn_predict2 <- knn(tnf2, vnf2, cl=train.normalized.df2$`Personal Loan`, k =1)
+head(knn_predict2)
+knn_predict2 <- as.data.frame(knn_predict2)
+
+```
+
+
+```{r}
+#predicting KNN using combined validation and test data
+cl2= as.data.frame(train.normalized.df2[,8])
+tnf2 = as.data.frame(train.normalized.df2)
+cnf3= as.data.frame(Combined_normalized2)
+dim(cl2)
+dim(train.normalized.df2[,1:7])
+dim(Combined_normalized2[,1:7])
+knn_predict3 <- knn(tnf2, cnf3, cl=train.normalized.df2$`Personal Loan`, k =1)
+head(knn_predict3)
+knn_predict3 <- as.data.frame(knn_predict3)
+```
+
+
+Customer class
+```{r}
+customer_df2 <- data.frame ("Age" =40, "Experience"=10, "Income"=84, "Family"=2, "CCAvg"=2, "Education_1"=0, "Education_2"=1, "Education_3"=0, "Mortgage"=0,  "Securities Account"=0, "CD Account"=0,  "Online" =1, "Credit Card"=1)
+
+dim(tnf2)
+dim(customer_df2)
+
+customerClass2 <- knn ((tnf2[, c(-6, -8)]), (customer_df2),  cl = Combined_normalized2$`Personal Loan`, k = 1, prob = 0.5)
+
+summary(customerClass)  #CUSTOMER class is  0. Customer is NOT likely to accept a personal loan according to this model
+
+```
+
+
+```{r}
+ # k= 8 gives the highest accuracy percentage of 91%
+accuracy.df2 <- data.frame(k= seq (1, 20, 1), accuracy = rep(0, 20))
+
+for( y in 1:20){
+  prediction2 <- knn (tnf2, cnf3, cl= Combined_normalized2$`Personal Loan`,  k = y)
+  accuracy.df2[y, 2] <- confusionMatrix ( as.factor(prediction2) , as.factor(Combined_normalized2$`Personal Loan`))$overall[1]
+}
+
+accuracy.df2
+
+```
+
+
+```{r}
+#Using only validation dataset
+valid_labels2 <-as.data.frame( vnf2[,8])
+
+CrossTable( valid_labels2$`vnf2[, 8]`,  knn_predict2$knn_predict2,   prop.chisq = FALSE)     #Model accuracy = TP+TN/Total= 99%, specifity= 99.9%, percision= 99%, sesitivity =93%
+
+```
+
+```{r}
+#Using combined validation and test datasets 
+valid_labels2 <-as.data.frame(cnf3[,8])
+
+CrossTable( valid_labels2$`cnf3[, 8]`,  knn_predict3$knn_predict3,   prop.chisq = FALSE )     #Model accuracy = TP+TN/Total= 99.9%, specifity= 99.9%, percision= 98.7%, sesitivity =91% This model give highest results.
+
+```
+In this dataset of 5000 customers only 480 has accepted a perosnal loan. Since KNN is a supervised learning algorithm that uses labels for classification, it is important to change K number that is suitable to the the volume of data. choosing a low K might cause overfitting in a small dataset, whereas choosing a high K in a big dataset may cause the model to ignore smaller trends. 
+
+
+
+
+
+
