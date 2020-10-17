@@ -1,0 +1,93 @@
+---
+title: 'Assignmnet #3'
+output: html_document
+---
+
+```{r}
+library(readr)
+library(dplyr)
+
+FlightDelays <- read_csv("FlightDelays.csv") 
+
+View(FlightDelays)
+FlightDelays$DAY_WEEK<- as.factor(FlightDelays$DAY_WEEK)
+FlightDelays$Flight_Status<- as.factor(FlightDelays$Flight_Status)
+FlightDelays$CRS_DEP_TIME <- as.factor(round(FlightDelays$CRS_DEP_TIME/100))
+
+str(FlightDelays)
+
+FlightDelays <- FlightDelays[c(1,2,4,8,10,13)]
+
+```
+
+
+```{r}
+library(ISLR)
+library(e1071) 
+library(dplyr)
+library(caret)
+```
+
+
+```{r}
+summary(FlightDelays)
+colMeans(is.na(FlightDelays))  #Checking for Missing Values
+
+```
+
+
+```{r}
+set.seed(123)
+split_train <- createDataPartition(FlightDelays$Flight_Status, p=0.6, list=FALSE)   #Split Data into 60%Training and rest Validation
+Trainingdata <-FlightDelays[split_train,]
+Validationdata <- FlightDelays[-split_train,]
+
+```
+
+Build  Naive Bayes model to predict whether the flight is delayed or not
+```{r}
+
+Model <- naiveBayes(Flight_Status~., data= Trainingdata)
+Model
+
+```
+
+```{r}
+library(gmodels)
+
+Prediction <- predict(Model, Validationdata)  #Use the Naive Bayes model to predict whether the flight is delayed or not
+CrossTable(x=Validationdata$Flight_Status, y=Prediction, prop.chisq = FALSE) 
+
+
+Count_table <- CrossTable(x= FlightDelays$DEST, y=FlightDelays$Flight_Status, prop.chisq = FALSE)       # Output both a count table outlining how many and what proportion of flights were delayed and on-time at each of the three airports.
+
+prop.table(table(Trainingdata$Flight_Status, Trainingdata$DEST), margin = 1) #proportion table : At EWR airport 40% flights were delayed, whereas %28 were on time. 
+
+confusionMatrix(Prediction, Validationdata$Flight_Status)    #Output the confusion matrix
+
+```
+
+
+
+```{r}
+library(pROC)
+
+Prediction_prob <- predict(Model, Validationdata, type = "raw")
+Prediction_prob
+
+ROCcurve <- roc(Validationdata$Flight_Status, Prediction_prob[ ,2])
+
+Proc <- plot.roc(Validationdata$Flight_Status, Prediction_prob[ ,2])
+
+Proc    #Area under the curve: 0.6383
+
+```
+
+
+
+
+
+
+
+
+
