@@ -1,6 +1,6 @@
 # Machine-learning
 
-1- Introduction to R
+1- Intro to R
 
 2- KNN Classification 
 
