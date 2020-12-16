@@ -1,0 +1,325 @@
+---
+title: "FINAL EXAM- Machine Learning"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r comment=NA, message=FALSE}
+library(ISLR)
+library(tidyverse)
+library(factoextra)
+library(ggplot2)
+library(readr)
+library(corrplot)
+library(esquisse)
+library(caret)
+library(dplyr)
+library(fastDummies)
+library(pROC)
+library("gmodels")
+library(rpart)
+library(rattle)
+library(fastDummies)
+library(FNN)
+
+```
+
+
+## I. Data Preparation and Explorartion
+```{r comment=NA, message=FALSE}
+set.seed(11)
+BathSoap <- read_csv("BathSoap.csv")
+
+#summary(BathSoap)
+
+#colMeans(is.na(BathSoap))   #Checking for any missing values
+
+#convert percentage to decimals to change the variables from character to numerical
+soupdf <- BathSoap[,c(20:46)] %>%
+  mutate_each(funs(as.numeric(gsub("%", "", ., fixed = TRUE))/100))
+DF <- cbind(BathSoap[,c(1:19)], soupdf)
+
+#replacing 0 records in ther ordinal variables sex, EDU, CS and HS with NA to handle it as missing values
+DF$SEX <- na_if(DF$SEX,0)
+DF$CS<- na_if(DF$CS, 0)
+DF$EDU <- na_if(DF$EDU, 0)
+DF$HS <- na_if(DF$HS, 0)
+
+#deleting missing values since it is a small portion of the data.
+data<-na.omit(DF)
+
+#Checking for any duplicated household ID. No duplicated rows found.
+#duplicated(data$`Member id`)
+
+#Categorical data preparation 
+data$SEX <-  as.factor(data$SEX)
+data$CS <- as.factor(data$CS)
+data$SEC <- as.factor(data$SEC)
+data$AGE <- as.factor(data$AGE)
+data$EDU <- as.factor(data$EDU)
+data$FEH <-as.factor(data$FEH)
+data$CHILD<-as.factor(data$CHILD)
+
+#Looking at the distribution in the dataset. some variables had big ranges and outliers
+boxplot(data[, c(11:22)])
+
+#plotting correlation between different variables showing positive correlation relation between some brand purchase and certain selling proposition  categories
+corrplot(cor(data[, c(12:46)]), method= "color")
+
+```
+
+## II. Building the clustering model
+
+1- Use Kmeans clustering to identify clusters of households based on variables describing purchase behavior 
+```{r}
+set.seed(122)
+#Normalizing variables related to purchases process  using z-score
+Purchase_behavior_normalized <- scale(data[,c(12:18, 20:22)])
+
+#Finding the optimal k number using both Elbow method and Silouhette
+fviz_nbclust(Purchase_behavior_normalized, kmeans, method = "wss")  #Elbow method shows less wss variability when k is between 4,5
+
+
+#Choosing k= 4 as marketing prefer 2-5 promotional approaches
+set.seed(129)
+Behavior_model <- kmeans(Purchase_behavior_normalized, centers= 4, nstart= 30)
+
+Behavior_model$size  #cluster 3  has the highest number of households
+Behavior_model$withinss  #cluster 1 has the least within-cluster sum of squares
+
+#Running cluster centroids to better understand the characteristics of each cluster
+Centers <- as.data.frame(t(Behavior_model$centers)) %>%
+   rename(Cluster1 = 1, Cluster2 =2, Cluster3=3, Cluster4=4)
+Centers 
+
+ #Plotting the 4 clusters
+fviz_cluster(Behavior_model, data =  Purchase_behavior_normalized)
+
+
+```
+
+#Summary: Cluster 1 has the highest ratio of transactions to brand runs, has the second highest volume  purchased with no promo, highest total volume and highest total value. Cluster 2 has the highest no of brands purchased , high volume, highest purchase frequency, highest no of transactions, second lowest trans/brand runs ratio,and second highest in volume purchases with no promo. Cluster 3 has the highest volume purchased with no promo, and second highest trans.brand runs ratio.  Cluster 4  is the highest of all in terms of  susceptibility to discounts . To summarize, Cluster 1 has to be the highest in terms of brand loyality based on variables related to purchase behaviors.
+
+
+
+
+
+Identify clusters of households based on variables describing basis of purchase
+```{r}
+#Normalizing variables related to  purchase basis using z-score
+PurchaseBasis_normalized <- scale(data[,c(19, 32:46)])
+
+#Finding the optimal k number using both Elbow method and Silouhette
+fviz_nbclust(PurchaseBasis_normalized, kmeans, method = "wss")  #Elbow method shows less wss variability when k is between 3,6
+
+set.seed(121)
+#Choosing K=3 as marketing prefer 2-5 promotional approaches
+Purchasebasis_model <- kmeans(PurchaseBasis_normalized, centers=3,  nstart= 30)
+
+Purchasesbasis_Centers <- as.data.frame(t(Purchasebasis_model$centers)) %>%
+   rename(Cluster1 = 1, Cluster2 =2, Cluster3=3)
+Purchasesbasis_Centers 
+
+```
+
+#Summary: cluster 1 is characterized by lowest average price of purchases and highest volume purchased under price category 3. Cluster 2 has the highest volume purchased under price category 1 and lowest average price of purchase. Cluster 3 has the highest average price of purchases and highest volume purchased under price category 1.
+
+
+
+
+Identify clusters of households based on variables describing both purchase behaviors and basis of purchase
+```{r}
+set.seed(40)
+Combined <- cbind(Purchase_behavior_normalized, PurchaseBasis_normalized)  #Normalizing  two combined datasets
+
+#Finding the optimal k number using both Elbow method and Silhouette.
+fviz_nbclust(Combined, kmeans, method = "wss")  #Elbow method shows less wss variability when k is between 4,6
+
+#Choosing K=4 as marketing prefer 2-5 promotional approaches
+Combined_model <- kmeans(Combined, centers=4,  nstart= 30)
+
+Combined_model$size  #cluster 4 has the highest number of households
+Combined_model$withinss #cluster 2 has the least within cluster sum of squares
+
+CombinedModel_centers <- as.data.frame(t(Combined_model$centers)) %>%
+   rename(Cluster1 = 1, Cluster2 =2, Cluster3=3, Cluster4=4)
+CombinedModel_centers 
+
+```
+
+CRISA has both both advertising agencies and consumer goods manufacturers as clients. And so I believe best segmentation method here based on the company's profile is the one based on both Purchase behaviors and basis of purchase and demographics. CRISA can use purchase behavior clustering analysis to identify loyal customers and select the promotion strategy that fits each customer segment. 
+
+```{r comment=NA, message=FALSE}
+#creating dataframe to combine clusters membership with original data including categorical variables to better understand clusters characteristics
+Clusters_fulldata <- cbind(data, Clusters= Combined_model$cluster)
+Clusters_fulldata$Clusters = as.factor(Clusters_fulldata$Clusters)
+
+#Now we run summary statistics on original data
+as.data.frame(t(aggregate(Clusters_fulldata[,c(12:46)], by=list(Clusters_fulldata$Clusters), FUN=median)))
+
+```
+
+## III. Insights from customer demographics and purchase behaviors
+
+```{r}
+#cluster 4  has the highest ratio of number of transactions/brand runs
+ggplot(Clusters_fulldata) +
+ aes(x = "", y = `Trans / Brand Runs`, fill = Clusters) +
+ geom_boxplot() +
+ scale_fill_hue() +
+ theme_minimal()
+
+#Older Age groups (3,4)  have  slightly higher ratio of transactions to brand runs
+ggplot(Clusters_fulldata) +
+ aes(x = "", y = `Trans / Brand Runs`, fill = AGE) +
+ geom_boxplot() +
+ scale_fill_hue() +
+ theme_minimal()
+
+#Clusters 3,2  and 1 have higher number of customers of age group of 3,4
+ggplot(Clusters_fulldata) +
+ aes(x = AGE, fill = Clusters) +
+ geom_bar() +
+ scale_fill_brewer(palette = "Blues") +
+ labs(title = "Clusters vs Age group") +
+ theme_minimal()
+
+#Clusters 1,2 are dominated by customers with education level of 4 and 5 with a big portion of customer with education level 5 in cluster 3.
+ggplot(Clusters_fulldata) +
+ aes(x = EDU, fill = Clusters) +
+ geom_bar() +
+ scale_fill_brewer(palette = "Blues") +
+ labs(title = "Education level vs cluster") +
+ theme_minimal()
+
+#Here we see that overall the Household purchases are made by females. 
+ggplot(Clusters_fulldata) +
+ aes(x = Clusters, fill = SEX) +
+ geom_bar() +
+ scale_fill_brewer(palette = "Blues") +
+ labs(title = "Gender frequency in Clusters") +
+ theme_minimal()
+
+
+#Clusters 2,3 are characterized by high level of socioeconomic class
+ggplot(Clusters_fulldata) +
+ aes(x = SEC) +
+ geom_bar(fill = "#0c4c8a") +
+ labs(title = "Socioeconmic Class per cluster") +
+ theme_minimal() +
+ facet_wrap(vars(Clusters))
+
+
+#Clusters 1,2 are characterized by bigger families(higher number of children)
+ggplot(Clusters_fulldata) +
+ aes(x = CHILD, fill = Clusters) +
+ geom_bar() +
+ scale_fill_brewer(palette = "Blues") +
+ labs(title = "Number of Childs per Cluster") +
+ theme_minimal()
+
+```
+
+
+## IV. Classification Model
+
+To build a classification model , we first create a target variable. Cluster 2 was chosen for the following reasons:
+
+- They have a diverse socioeconomic class allowing CRISA to gain a variety of demographic attributes.
+- They have the lowest degree of brand loyalty, which allows CRISA to process a wide variety of demographic attributes across the highest multitude of brands.
+- They have the highest volume of purchases through promotion discounts and would be least likely to perceive brand dilution from discounts.
+- They have the highest purchases of value, which would prompt them to be more likely to utilize promotions.
+Hence, theses customers are susceptible to discounts and are making more frequent purchases.
+
+```{r}
+Model <-Clusters_fulldata[,c(2:19,47)]
+as.numeric(Model$Clusters)
+Model$target <- ifelse(Model$Clusters == 2,"Yes","No")
+
+#Convert multiple level categorical variables to dummy variables 
+Model <- dummy_cols(Model, select_columns =  c("SEC","FEH","SEX","AGE","EDU","CS","CHILD"), remove_selected_columns = TRUE)
+
+
+#Split data to training data and test data with ratio (80%:20%) respectively. 
+set.seed(119)
+Train_index <- createDataPartition(Model$Clusters, p=0.8, list = FALSE)
+Train_data <- Model[Train_index,]
+Test_data <- Model[-Train_index,]
+
+#Drop the variables clusters from the data
+Train_data$Clusters= NULL
+Test_data$Clusters = NULL
+
+#Normalize the data using z-score
+norm.values <- preProcess(Train_data[, -12], method=c("center", "scale"))
+Normalized_train <-as.data.frame(predict(norm.values,Train_data))
+Normalized_test <- as.data.frame(predict(norm.values,Test_data))
+train_label<- Train_data[,12,  drop = TRUE]
+test_label <- Test_data[,12, drop = TRUE]
+
+
+#choosing optimal K number. # k= 5 gives the highest accuracy percentage of 70#
+
+accuracy.df <- data.frame (k= seq (1, 30, 1), accuracy = rep(0, 30))
+for (i in 1:30) {
+   prediction  <- knn(Normalized_train[,-12], Normalized_test[,-12], cl= train_label, k = i)
+  accuracy.df[i, 2] <- confusionMatrix (as.factor(prediction), as.factor(test_label))$overall[1]
+}
+
+#Build KNN model for k =5 to predict whether or not a customer belongs to cluster 3
+set.seed(130)
+knn_model <- knn(Normalized_train[,-12], Normalized_test[,-12], cl=train_label, k= 5, prob= TRUE)
+
+
+#confusion matrix. Model accuracy is 76%. specificity= 81%, precision= 53%, and Sensitivity= 62% . The model did well in predicting the customer who don't classify as cluster 2.  Out of 99 records, only 24 were missclassified. 
+CrossTable(x=test_label,y=knn_model, prop.chisq = FALSE)
+
+
+#Probability Output:  the proportion of nearest neighbors that belongs to the majority class(Cluster 3)
+class_prob<-attr(knn_model, 'prob')
+head(class_prob)
+
+```
+
+
+
+## IIV. Conclusion and Insights 
+
+CRISA Goals:
+- Allow CRISA to deploy and design promotion budgets more effectively.
+- Gain information about demographic attributes associated with different purchase behaviors and degrees of brand loyalty .
+
+And hence, CRISA should target Customer Cluster 2.
+
+The case for Customer Segment 2:
+- They have a diverse socioeconomic class allowing CRISA to gain a variety of demographic attributes.
+- They have the lowest degree of brand loyalty, which allows CRISA to process a wide variety of demographic attributes across the highest multitude of brands.
+- They have the highest volume of purchases through promotion discounts and would be least likely to perceive brand dilution from discounts.
+- They have the highest purchases of value, which would prompt them to be more likely to utilize promotions.
+
+The case against Customer Segments 1,3, and 4:
+- Segment 3  would most likely experience brand dilution via promotions and see a particular set of brands as inferior when on sale. They are oriented around quality, not value.
+- Segment 4 has the highest brand loyalty, which would prevent CRISA from gaining a wide spectrum of information on the largest number of purchased brands. Segment 4 is also the demographic that appears to be the early adopters(i.e. Apple enthusiasts waiting in line on the day of release for the new iPhone)
+- Segment 1 has the lowest purchase volume. While they do purchase  a number of brands, they are likely to let promotions pass by, which could prevent CRISA from analyzing their key problems due to lack of volume and frequency.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
