@@ -10,5 +10,5 @@
 
 5- Hierarchical Clustering
 
-6- Recommended Systems and Final
+6- Recommendation Systems and Final Project
 
